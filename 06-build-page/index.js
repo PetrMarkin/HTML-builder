@@ -8,15 +8,37 @@ const assetsDistPath = path.join(projectDistPath, 'assets');
 const styleCssPath = path.join(projectDistPath, 'style.css');
 const indexHtmlPath = path.join(projectDistPath, 'index.html');
 const templateHtmlPath = path.join(__dirname, 'template.html');
+const componentsPath = path.join(__dirname, 'components');
 const stylesPath = path.join(__dirname, 'styles');
 const writeableStreamCss = fs.createWriteStream(styleCssPath);
-const writeableStreamIndexHtml = fs.createWriteStream(indexHtmlPath);
 
 fs.mkdir(projectDistPath, { recursive: true }, () => {});
 fs.mkdir(assetsDistPath, { recursive: true }, () => {});
 fs.unlink(assetsDistPath, () => {});
 
-async function copyFiles(assetsPath) {
+const readableTemplate = fs.createReadStream(templateHtmlPath, 'utf-8', () => {});
+readableTemplate.on('data', (chunk) => {
+  let data = '';
+  data += chunk;
+  fs.readdir(componentsPath, { withFileTypes: true }, (err, files) => {
+    if (err) {
+      console.log(err);
+    } else {
+      files.forEach((file) => {
+        if (file.isFile() && path.extname(file.name) === '.html') {
+          const component = file.name.replace(path.extname(path.join(componentsPath, file.name)), '');
+          const readableComponents = fs.createReadStream(path.join(componentsPath, file.name), 'utf-8');
+          readableComponents.on('data', (chunk) => {
+            data = data.replaceAll(`{{${component}}}`, chunk);
+            fs.writeFile(indexHtmlPath, data, () => {});
+          })
+        }
+      })
+    }
+  })
+});
+
+async function bundleAssets(assetsPath) {
   await fsPromises
     .readdir(assetsPath, { withFileTypes: true })
     .then((files) => {
@@ -28,7 +50,7 @@ async function copyFiles(assetsPath) {
             { recursive: true },
             () => {},
           );
-          copyFiles(currentPath);
+          bundleAssets(currentPath);
         } else {
           fsPromises.copyFile(currentPath, path.join(assetsDistPath, currentPath.slice(66)));
         }
@@ -38,7 +60,7 @@ async function copyFiles(assetsPath) {
       console.log(err);
     });
 }
-copyFiles(assetsPath);
+bundleAssets(assetsPath);
 
 fs.readdir(stylesPath, { withFileTypes: true }, (err, files) => {
   if (err) {
